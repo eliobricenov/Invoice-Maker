@@ -12,24 +12,16 @@ contract PaymentSplitter {
     mapping(uint => Bill) bills;
 
     struct Bill {
-        address recipient;
-        address[] payers;
+        address payable recipient;
         address token;
-        uint fee;
         uint total;
         uint pledged;
         bool payed;
     }
 
-    event BillCreated(
-        uint id,
-        address recipient,
-        address[] payers,
-        address token,
-        uint total
-    );
+    event BillCreated(uint id, address recipient, address token, uint total);
 
-    event BillPaymentSubmitted(uint id, address payer);
+    event BillPaymentSubmitted(uint id, address payer, uint amount);
 
     event BillPayed(uint id);
 
@@ -48,36 +40,37 @@ contract PaymentSplitter {
     }
 
     function createBill(
-        address recipient,
+        address payable recipient,
         uint total,
-        address[] calldata payers,
         address token
     ) external {
-        uint fee = total / payers.length;
         billCounter++;
-        bills[billCounter] = Bill(
-            recipient,
-            payers,
-            token,
-            fee,
-            total,
-            0,
-            false
-        );
-        emit BillCreated(billCounter, recipient, payers, token, total);
+        bills[billCounter] = Bill(recipient, token, total, 0, false);
+        emit BillCreated(billCounter, recipient, token, total);
     }
 
-    function submitPayment(uint id) external validBill(id) {
+    function submitPayment(uint id, uint amount) external validBill(id) {
         Bill storage bill = bills[id];
 
         require(!bill.payed, "bill already payed");
-        require((bill.pledged + bill.fee) <= bill.total, "bill overfunded");
+        require((bill.pledged + amount) <= bill.total, "bill overfunded");
 
         IERC20 token = IERC20(bill.token);
-        token.safeTransferFrom(msg.sender, address(this), bill.fee);
+        token.safeTransferFrom(msg.sender, address(this), amount);
 
-        bill.pledged += bill.fee;
-        emit BillPaymentSubmitted(id, msg.sender);
+        bill.pledged += amount;
+        emit BillPaymentSubmitted(id, msg.sender, amount);
+    }
+
+    function submitEthPayment(uint id) external payable validBill(id) {
+        Bill storage bill = bills[id];
+
+        require(bill.token == address(0), "bill uses token");
+        require(!bill.payed, "bill already payed");
+        require((bill.pledged + msg.value) <= bill.total, "bill overfunded");
+
+        bill.pledged += msg.value;
+        emit BillPaymentSubmitted(id, msg.sender, msg.value);
     }
 
     function claimBill(uint id) external validBill(id) {
@@ -87,8 +80,13 @@ contract PaymentSplitter {
         require(bill.pledged == bill.total, "bill underfunded");
         require(!bill.payed, "bill already payed");
 
-        IERC20 token = IERC20(bill.token);
-        token.safeTransfer(msg.sender, bill.total);
+        if (bill.token == address(0)) {
+            (bool sent, ) = bill.recipient.call{value: bill.total}("");
+            require(sent, "Failed to send Ether");
+        } else {
+            IERC20 token = IERC20(bill.token);
+            token.safeTransfer(msg.sender, bill.total);
+        }
 
         bill.payed = true;
         emit BillPayed(id);
