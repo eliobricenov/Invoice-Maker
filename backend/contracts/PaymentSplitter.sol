@@ -3,9 +3,9 @@ pragma solidity ^0.8.9;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import "hardhat/console.sol";
+import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 
-contract PaymentSplitter {
+contract PaymentSplitter is ReentrancyGuard {
     using SafeERC20 for IERC20;
 
     uint billCounter;
@@ -73,12 +73,14 @@ contract PaymentSplitter {
         emit BillPaymentSubmitted(id, msg.sender, msg.value);
     }
 
-    function claimBill(uint id) external validBill(id) {
+    function claimBill(uint id) external validBill(id) nonReentrant {
         Bill storage bill = bills[id];
 
         require(bill.recipient == msg.sender, "only recipient can claim bill");
         require(bill.pledged == bill.total, "bill underfunded");
         require(!bill.payed, "bill already payed");
+
+        bill.payed = true;
 
         if (bill.token == address(0)) {
             (bool sent, ) = bill.recipient.call{value: bill.total}("");
@@ -88,7 +90,6 @@ contract PaymentSplitter {
             token.safeTransfer(msg.sender, bill.total);
         }
 
-        bill.payed = true;
         emit BillPayed(id);
     }
 }
