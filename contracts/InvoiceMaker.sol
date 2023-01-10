@@ -89,8 +89,6 @@ contract InvoiceMaker is ReentrancyGuard {
         require(invoice.pledged == invoice.total, "invoice underfunded");
         require(!invoice.payed, "invoice already payed");
 
-        invoice.payed = true;
-
         if (invoice.token == address(0)) {
             (bool sent, ) = invoice.recipient.call{value: invoice.total}("");
             require(sent, "Failed to send Ether");
@@ -98,6 +96,8 @@ contract InvoiceMaker is ReentrancyGuard {
             IERC20 token = IERC20(invoice.token);
             token.safeTransfer(msg.sender, invoice.total);
         }
+
+        invoice.payed = true;
 
         emit InvoicePayed(id);
     }
