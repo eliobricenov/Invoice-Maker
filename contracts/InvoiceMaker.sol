@@ -15,15 +15,15 @@ contract InvoiceMaker is ReentrancyGuard {
         address payable recipient;
         address token;
         uint total;
-        uint pledged;
-        bool payed;
+        uint pledgedAmount;
+        bool claimed;
     }
 
     event InvoiceCreated(uint id, address recipient, address token, uint total);
 
     event InvoicePaymentSubmitted(uint id, address payer, uint amount);
 
-    event InvoicePayed(uint id);
+    event InvoiceClaimed(uint id);
 
     constructor() {}
 
@@ -33,9 +33,7 @@ contract InvoiceMaker is ReentrancyGuard {
         _;
     }
 
-    function getInvoice(
-        uint id
-    ) external view validInvoice(id) returns (Invoice memory) {
+    function getInvoice(uint id) external view returns (Invoice memory) {
         return invoices[id];
     }
 
@@ -52,16 +50,17 @@ contract InvoiceMaker is ReentrancyGuard {
     function submitPayment(uint id, uint amount) external validInvoice(id) {
         Invoice storage invoice = invoices[id];
 
-        require(!invoice.payed, "invoice already payed");
+        require(invoice.token != address(0), "invoice uses ETH");
+        require(!invoice.claimed, "invoice already claimed");
         require(
-            (invoice.pledged + amount) <= invoice.total,
+            (invoice.pledgedAmount + amount) <= invoice.total,
             "invoice overfunded"
         );
 
         IERC20 token = IERC20(invoice.token);
         token.safeTransferFrom(msg.sender, address(this), amount);
 
-        invoice.pledged += amount;
+        invoice.pledgedAmount += amount;
         emit InvoicePaymentSubmitted(id, msg.sender, amount);
     }
 
@@ -69,13 +68,13 @@ contract InvoiceMaker is ReentrancyGuard {
         Invoice storage invoice = invoices[id];
 
         require(invoice.token == address(0), "invoice uses token");
-        require(!invoice.payed, "invoice already payed");
+        require(!invoice.claimed, "invoice already claimed");
         require(
-            (invoice.pledged + msg.value) <= invoice.total,
+            (invoice.pledgedAmount + msg.value) <= invoice.total,
             "invoice overfunded"
         );
 
-        invoice.pledged += msg.value;
+        invoice.pledgedAmount += msg.value;
         emit InvoicePaymentSubmitted(id, msg.sender, msg.value);
     }
 
@@ -86,8 +85,8 @@ contract InvoiceMaker is ReentrancyGuard {
             invoice.recipient == msg.sender,
             "only recipient can claim invoice"
         );
-        require(invoice.pledged == invoice.total, "invoice underfunded");
-        require(!invoice.payed, "invoice already payed");
+        require(invoice.pledgedAmount == invoice.total, "invoice underfunded");
+        require(!invoice.claimed, "invoice already claimed");
 
         if (invoice.token == address(0)) {
             (bool sent, ) = invoice.recipient.call{value: invoice.total}("");
@@ -97,8 +96,8 @@ contract InvoiceMaker is ReentrancyGuard {
             token.safeTransfer(msg.sender, invoice.total);
         }
 
-        invoice.payed = true;
+        invoice.claimed = true;
 
-        emit InvoicePayed(id);
+        emit InvoiceClaimed(id);
     }
 }

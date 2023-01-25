@@ -93,8 +93,8 @@ describe("InvoiceMaker", () => {
       expect(invoice.recipient).to.equal(recipient.address);
       expect(invoice.total).to.equal(invoiceTotal.toString());
       expect(invoice.token).to.equal(token.address);
-      expect(invoice.pledged).to.equal("0");
-      expect(invoice.payed).to.equal(false);
+      expect(invoice.pledgedAmount).to.equal("0");
+      expect(invoice.claimed).to.equal(false);
     });
   });
 
@@ -127,7 +127,9 @@ describe("InvoiceMaker", () => {
         payerBalanceBeforePayment.sub(paymentAmount).toString()
       );
 
-      expect(invoice.pledged.toString()).to.equal(paymentAmount.toString());
+      expect(invoice.pledgedAmount.toString()).to.equal(
+        paymentAmount.toString()
+      );
     });
 
     it("Validates over-payment", async () => {
@@ -156,7 +158,7 @@ describe("InvoiceMaker", () => {
 
       return await expect(
         splitter.submitPayment(1, invoice.total.div(payers.length))
-      ).to.be.rejectedWith(getRevertedMessage("invoice already payed"));
+      ).to.be.rejectedWith(getRevertedMessage("invoice already claimed"));
     });
   });
 
@@ -219,7 +221,9 @@ describe("InvoiceMaker", () => {
         payerBalanceBeforePayment.sub(paymentAmount).sub(gasUsed).toString()
       );
 
-      expect(invoice.pledged.toString()).to.equal(paymentAmount.toString());
+      expect(invoice.pledgedAmount.toString()).to.equal(
+        paymentAmount.toString()
+      );
     });
 
     it("Validates over-payment", async () => {
@@ -257,7 +261,7 @@ describe("InvoiceMaker", () => {
         splitter.connect(payers[0]).submitEthPayment(invoiceId, {
           value: paymentAmount,
         })
-      ).to.be.rejectedWith(getRevertedMessage("invoice already payed"));
+      ).to.be.rejectedWith(getRevertedMessage("invoice already claimed"));
     });
   });
   describe("Claim invoice", () => {
@@ -306,7 +310,7 @@ describe("InvoiceMaker", () => {
 
       const invoice = await splitter.getInvoice(1);
 
-      expect(invoice.payed).to.equal(true);
+      expect(invoice.claimed).to.equal(true);
 
       expect(recipientBalanceAfterClaim.toString()).to.equal(
         recipientBalanceBeforeClaim.add(invoice.total).toString()
@@ -343,7 +347,7 @@ describe("InvoiceMaker", () => {
 
       const invoice = await splitter.getInvoice(1);
 
-      expect(invoice.payed).to.equal(true);
+      expect(invoice.claimed).to.equal(true);
 
       expect(recipientBalanceAfterClaim.toString()).to.equal(
         recipientBalanceBeforeClaim.add(invoice.total).sub(gasUsed).toString()
@@ -363,7 +367,7 @@ describe("InvoiceMaker", () => {
 
       return await expect(
         splitter.connect(recipient).claimInvoice(1)
-      ).to.be.rejectedWith(getRevertedMessage("invoice already payed"));
+      ).to.be.rejectedWith(getRevertedMessage("invoice already claimed"));
     });
   });
 });
